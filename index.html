@@ -12,14 +12,14 @@
             background-color: #f0f0f0;
         }
         .container {
-            max-width: 800px;
+            max-width: 1000px;
             margin: 0 auto;
             background-color: #ffffff;
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-        h1 {
+        h1, h2 {
             color: #333;
         }
         button {
@@ -46,15 +46,37 @@
         #imageList {
             list-style-type: none;
             padding: 0;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            margin-top: 10px;
         }
         #imageList li {
             background-color: #f9f9f9;
-            margin-bottom: 10px;
-            padding: 10px;
+            margin-bottom: 5px;
+            padding: 5px 10px;
             border-radius: 4px;
         }
         #results {
             margin-top: 20px;
+        }
+        .result-item {
+            background-color: #f9f9f9;
+            margin-bottom: 15px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        #progressBar {
+            width: 100%;
+            background-color: #ddd;
+            margin-top: 20px;
+        }
+        #progressBar > div {
+            height: 30px;
+            background-color: #4CAF50;
+            text-align: center;
+            line-height: 30px;
+            color: white;
         }
     </style>
 </head>
@@ -67,16 +89,23 @@
         </div>
         <div>
             <button id="selectImages">Select Images</button>
+            <span id="imageCount"></span>
         </div>
         <ul id="imageList"></ul>
         <div>
             <button id="analyzeImages">Analyze Images</button>
+            <button id="exportResults" style="display: none;">Export Results</button>
+        </div>
+        <div id="progressBar" style="display: none;">
+            <div></div>
         </div>
         <div id="results"></div>
     </div>
 
     <script>
         const { ipcRenderer } = require('electron');
+
+        let analysisResults = [];
 
         document.getElementById('saveApiKey').addEventListener('click', async () => {
             const apiKey = document.getElementById('apiKeyInput').value;
@@ -103,27 +132,68 @@
                 li.textContent = path;
                 imageList.appendChild(li);
             });
+            document.getElementById('imageCount').textContent = `${paths.length} image(s) selected`;
         });
 
         document.getElementById('analyzeImages').addEventListener('click', async () => {
+            if (selectedImages.length === 0) {
+                alert('Please select images first.');
+                return;
+            }
+
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = '';
+            document.getElementById('progressBar').style.display = 'block';
+            document.getElementById('analyzeImages').disabled = true;
 
-            for (const imagePath of selectedImages) {
-                try {
-                    const result = await ipcRenderer.invoke('analyze-image', imagePath);
-                    const content = result.content[0].text;
-                    
-                    const resultHtml = `
-                        <h3>Results for ${imagePath}</h3>
-                        <pre>${content}</pre>
-                    `;
-                    resultsDiv.innerHTML += resultHtml;
-                } catch (error) {
-                    console.error('Error analyzing image:', error);
-                    resultsDiv.innerHTML += `<p>Error analyzing ${imagePath}: ${error.message}</p>`;
-                }
+            try {
+                analysisResults = await ipcRenderer.invoke('analyze-images', selectedImages);
+                displayResults(analysisResults);
+            } catch (error) {
+                console.error('Error analyzing images:', error);
+                alert(`Error: ${error.message}`);
+            } finally {
+                document.getElementById('progressBar').style.display = 'none';
+                document.getElementById('analyzeImages').disabled = false;
+                document.getElementById('exportResults').style.display = 'inline-block';
             }
+        });
+
+        document.getElementById('exportResults').addEventListener('click', async () => {
+            if (analysisResults.length === 0) {
+                alert('No results to export.');
+                return;
+            }
+
+            const exported = await ipcRenderer.invoke('export-results', analysisResults);
+            if (exported) {
+                alert('Results exported successfully!');
+            }
+        });
+
+        function displayResults(results) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<h2>Analysis Results</h2>';
+            results.forEach(result => {
+                const resultItem = document.createElement('div');
+                resultItem.className = 'result-item';
+                if (result.error) {
+                    resultItem.innerHTML = `<strong>Error analyzing ${result.path}:</strong> ${result.error}`;
+                } else {
+                    resultItem.innerHTML = `
+                        <h3>${result.path}</h3>
+                        <pre>${result.content}</pre>
+                    `;
+                }
+                resultsDiv.appendChild(resultItem);
+            });
+        }
+
+        ipcRenderer.on('analysis-progress', (event, { current, total }) => {
+            const progressBar = document.getElementById('progressBar').firstElementChild;
+            const percentage = (current / total) * 100;
+            progressBar.style.width = `${percentage}%`;
+            progressBar.textContent = `${current} / ${total}`;
         });
     </script>
 </body>
