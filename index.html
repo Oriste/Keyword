@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Metadata Enhancer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 20px;
+            margin: 8px 0;
+            box-sizing: border-box;
+            border: 2px solid #ccc;
+            border-radius: 4px;
+        }
+        #imageList {
+            list-style-type: none;
+            padding: 0;
+        }
+        #imageList li {
+            background-color: #f9f9f9;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        #results {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI Metadata Enhancer</h1>
+        <div>
+            <input type="text" id="apiKeyInput" placeholder="Enter your Anthropic API key">
+            <button id="saveApiKey">Save API Key</button>
+        </div>
+        <div>
+            <button id="selectImages">Select Images</button>
+        </div>
+        <ul id="imageList"></ul>
+        <div>
+            <button id="analyzeImages">Analyze Images</button>
+        </div>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        document.getElementById('saveApiKey').addEventListener('click', async () => {
+            const apiKey = document.getElementById('apiKeyInput').value;
+            await ipcRenderer.invoke('save-api-key', apiKey);
+            alert('API key saved successfully!');
+        });
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const apiKey = await ipcRenderer.invoke('get-api-key');
+            if (apiKey) {
+                document.getElementById('apiKeyInput').value = apiKey;
+            }
+        });
+
+        let selectedImages = [];
+
+        document.getElementById('selectImages').addEventListener('click', async () => {
+            const paths = await ipcRenderer.invoke('select-images');
+            selectedImages = paths;
+            const imageList = document.getElementById('imageList');
+            imageList.innerHTML = '';
+            paths.forEach(path => {
+                const li = document.createElement('li');
+                li.textContent = path;
+                imageList.appendChild(li);
+            });
+        });
+
+        document.getElementById('analyzeImages').addEventListener('click', async () => {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            for (const imagePath of selectedImages) {
+                try {
+                    const result = await ipcRenderer.invoke('analyze-image', imagePath);
+                    const content = result.content[0].text;
+                    
+                    const resultHtml = `
+                        <h3>Results for ${imagePath}</h3>
+                        <pre>${content}</pre>
+                    `;
+                    resultsDiv.innerHTML += resultHtml;
+                } catch (error) {
+                    console.error('Error analyzing image:', error);
+                    resultsDiv.innerHTML += `<p>Error analyzing ${imagePath}: ${error.message}</p>`;
+                }
+            }
+        });
+    </script>
+</body>
+</html>
